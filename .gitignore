@@ -1,1 +1,6 @@
 offchain/.env
+.DS_Store
+onchain/lib/
+onchain/out/
+onchain/cache/
+onchain/broadcast/
