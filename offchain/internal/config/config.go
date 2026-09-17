@@ -23,6 +23,9 @@ type Config struct {
 
 	APIPort string
 	Env     string
+
+	MQURL   string // ← 新增 for RabbitMQ connection URL
+	MQQueue string // ← 新增 for RabbitMQ queue name
 }
 
 func Load() *Config {
@@ -61,6 +64,9 @@ func Load() *Config {
 
 		APIPort: getEnv("API_PORT", "8080"),
 		Env:     getEnv("ENVIRONMENT", "development"),
+
+		MQURL:   getEnv("MQ_URL", "amqp://guest:guest@localhost:5672/"), // ← 新增 for RabbitMQ connection URL
+		MQQueue: getEnv("MQ_QUEUE", "staking_events"),                   // ← 新增 for RabbitMQ queue name
 	}
 }
 

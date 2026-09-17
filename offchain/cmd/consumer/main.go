@@ -12,8 +12,6 @@ import (
 
 	"staking-offchain/internal/config"
 	"staking-offchain/internal/dao"
-	"staking-offchain/internal/indexer"
-	"staking-offchain/internal/infra/eth"
 	"staking-offchain/internal/mq"
 )
 
@@ -25,11 +23,7 @@ func main() {
 
 	cfg := config.Load()
 
-	slog.Info("starting staking indexer",
-		"rpc_url", cfg.RPCURL,
-		"contract_addr", cfg.ContractAddr,
-		"chain_id", cfg.ChainID,
-	)
+	slog.Info("starting consumer", "queue", cfg.MQQueue)
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
@@ -40,18 +34,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// MQ Producer
-	producer, err := mq.NewProducer(cfg.MQURL, cfg.MQQueue)
+	consumer, err := mq.NewConsumer(cfg.MQURL, cfg.MQQueue, db)
 	if err != nil {
-		slog.Error("failed to create producer", "error", err)
+		slog.Error("failed to create consumer", "error", err)
 		os.Exit(1)
 	}
-	defer producer.Close()
-
-	ethClient := eth.NewClient(cfg.RPCURL, cfg.ContractAddr, cfg.PrivateKey, cfg.ChainID)
-
-	cursorDAO := dao.NewCursorDAO(db)
-	listener := indexer.NewListener(ethClient, producer, cursorDAO, cfg.ContractAddr, cfg.ChainID)
+	defer consumer.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -65,5 +53,7 @@ func main() {
 		cancel()
 	}()
 
-	listener.Start(ctx)
+	if err := consumer.Start(ctx); err != nil {
+		slog.Error("consumer error", "error", err)
+	}
 }

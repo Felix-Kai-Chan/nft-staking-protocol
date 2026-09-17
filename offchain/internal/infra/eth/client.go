@@ -1,9 +1,9 @@
-// internal/infra/eth/client.go
 package eth
 
 import (
-	"log"
+	"log/slog"
 	"math/big"
+	"os"
 
 	"staking-offchain/internal/contract"
 
@@ -15,34 +15,36 @@ import (
 
 type Client struct {
 	EthClient *ethclient.Client
-	Filterer  *contract.ContractFilterer // 使用 ContractFilterer
-	Auth      *bind.TransactOpts         // 修正：TransactOpts（不是 Transact0pts）
+	Filterer  *contract.ContractFilterer
+	Auth      *bind.TransactOpts
 }
 
-func NewClient(rpcURL string, contractAddr string, privateKey string, chainID int64) *Client { // 修正：*Client（不是 *client）
+func NewClient(rpcURL string, contractAddr string, privateKey string, chainID int64) *Client {
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to the Ethereum client: %v", err)
+		slog.Error("failed to connect ethereum", "error", err)
+		os.Exit(1)
 	}
 
-	// 1. Filterer（给 Indexer 用，监听事件）
 	filterer, err := contract.NewContractFilterer(
 		common.HexToAddress(contractAddr),
 		client,
 	)
 	if err != nil {
-		log.Fatalf("Failed to create filterer: %v", err)
+		slog.Error("failed to create filterer", "error", err)
+		os.Exit(1)
 	}
 
-	// 2. Auth（给 API 用，发交易）
 	pk, err := crypto.HexToECDSA(privateKey)
 	if err != nil {
-		log.Fatalf("Invalid private key: %v", err)
+		slog.Error("invalid private key", "error", err)
+		os.Exit(1)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(pk, big.NewInt(chainID))
 	if err != nil {
-		log.Fatalf("Failed to create transactor: %v", err)
+		slog.Error("failed to create transactor", "error", err)
+		os.Exit(1)
 	}
 
 	return &Client{
