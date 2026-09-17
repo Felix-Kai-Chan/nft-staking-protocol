@@ -1,0 +1,147 @@
+services:
+  # ============================================
+  # MySQL
+  # ============================================
+  mysql:
+    image: mysql:8.0
+    container_name: staking-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: staking
+      TZ: Asia/Shanghai
+    ports:
+      - "23306:3306"
+    volumes:
+      - staking-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - staking-network
+
+  # ============================================
+  # RabbitMQ
+  # ============================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: staking-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - staking-network
+
+  # ============================================
+  # API 服务
+  # ============================================
+  api:
+    build:
+      context: ./offchain
+      dockerfile: Dockerfile
+    container_name: staking-api
+    restart: always
+    command: ["/app/api"]
+    ports:
+      - "8088:8080"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: staking
+
+      RPC_URL: "http://host.docker.internal:8545"
+      CONTRACT_ADDRESS: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+      PRIVATE_KEY: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      CHAIN_ID: "31337"
+
+      API_PORT: "8080"
+      ENVIRONMENT: "production"
+
+      MQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      MQ_QUEUE: "staking_events"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - staking-network
+
+  # ============================================
+  # Indexer 服务
+  # ============================================
+  indexer:
+    build:
+      context: ./offchain
+      dockerfile: Dockerfile
+    container_name: staking-indexer
+    restart: always
+    command: ["/app/indexer"]
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: staking
+
+      RPC_URL: "http://host.docker.internal:8545"
+      CONTRACT_ADDRESS: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+      PRIVATE_KEY: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      CHAIN_ID: "31337"
+
+      MQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      MQ_QUEUE: "staking_events"
+
+      NO_PROXY: "localhost,127.0.0.1,host.docker.internal,mysql,rabbitmq"
+      no_proxy: "localhost,127.0.0.1,host.docker.internal,mysql,rabbitmq"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - staking-network
+
+  # ============================================
+  # Consumer 服务
+  # ============================================
+  consumer:
+    build:
+      context: ./offchain
+      dockerfile: Dockerfile
+    container_name: staking-consumer
+    restart: always
+    command: ["/app/consumer"]
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: staking
+
+      MQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      MQ_QUEUE: "staking_events"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - staking-network
+
+volumes:
+  staking-mysql-data:
+
+networks:
+  staking-network:
+    driver: bridge
